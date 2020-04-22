@@ -38,7 +38,6 @@ public class KafkaToAliyunLog implements Runnable {
         String sinkAccessKeyId = properties.getProperty("sink.accessKeyId");
         String sinkAccessKeySecret = properties.getProperty("sink.accessKeySecret");
         String sinkLogStore = properties.getProperty("sink.logStore");
-        String sinkLogKey = properties.getProperty("sink.logKey", "content");
 
         Producer producer = new LogProducer(new ProducerConfig());
         producer.putProjectConfig(new ProjectConfig(sinkProject, sinkEndpoint, sinkAccessKeyId, sinkAccessKeySecret));
@@ -56,11 +55,15 @@ public class KafkaToAliyunLog implements Runnable {
                     }
                     for (ConsumerRecord<String, String> record : consumerRecords) {
                         LogItem logItem = new LogItem(getLogTime(record));
-                        logItem.PushBack(sinkLogKey, record.value());
-                        producer.send(sinkProject, sinkLogStore, record.topic(), getLogSource(record), logItem);
-                        log.debug("{}({}, {}) -> {} {} {}",
+                        logItem.PushBack("topic", record.topic());
+                        logItem.PushBack("partition", Long.toString(record.partition()));
+                        logItem.PushBack("offset", Long.toString(record.offset()));
+                        logItem.PushBack("key", record.key());
+                        logItem.PushBack("value", record.value());
+                        producer.send(sinkProject, sinkLogStore, record.topic(), null, logItem);
+                        log.debug("{}({}, {}) -> {} {}",
                                 record.topic(), record.partition(), record.offset(),
-                                sinkProject, sinkLogStore, record.topic());
+                                sinkProject, sinkLogStore);
                     }
                     consumer.commitAsync();
                 } catch (Exception e) {
@@ -76,14 +79,10 @@ public class KafkaToAliyunLog implements Runnable {
     }
 
     private int getLogTime(ConsumerRecord<?, ?> record) {
-        if (record.timestamp() == 0) {
-            return (int) TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis());
-        } else {
+        if (record.timestamp() > 0) {
             return (int) TimeUnit.MILLISECONDS.toSeconds(record.timestamp());
+        } else {
+            return (int) TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis());
         }
-    }
-
-    private String getLogSource(ConsumerRecord<?, ?> record) {
-        return record.topic() + "(" + record.partition() + ", " + record.offset() + ")";
     }
 }

@@ -69,6 +69,8 @@ public class KafkaToKafka implements Runnable {
                                     record.topic(), record.partition(), record.offset(),
                                     recordMetadata.topic(), recordMetadata.partition(), recordMetadata.offset());
                         } catch (Exception e) {
+                            log.error("{}({}, {}) -> ERROR",
+                                    record.topic(), record.partition(), record.offset());
                             log.error(e.getMessage(), e);
                         }
                     }

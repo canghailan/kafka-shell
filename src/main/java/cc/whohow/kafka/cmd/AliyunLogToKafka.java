@@ -18,6 +18,7 @@ import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Properties;
 import java.util.UUID;
@@ -78,16 +79,17 @@ public class AliyunLogToKafka implements Runnable {
     }
 
     private static class KafkaProcessor implements ILogHubProcessor {
+        private final String charset = StandardCharsets.UTF_8.name();
         private final String project;
         private final String logStore;
-        private final String logKey;
+        private final String valueKey;
         private final Producer<byte[], byte[]> kafkaProducer;
         private volatile int shardId;
 
         private KafkaProcessor(Properties properties, Producer<byte[], byte[]> kafkaProducer) {
             this.project = properties.getProperty("project");
             this.logStore = properties.getProperty("logStore");
-            this.logKey = properties.getProperty("logKey", "content");
+            this.valueKey = properties.getProperty("valueKey", "value");
             this.kafkaProducer = kafkaProducer;
         }
 
@@ -106,14 +108,15 @@ public class AliyunLogToKafka implements Runnable {
                         FastLog fastLog = fastLogGroup.getLogs(i);
                         for (int j = 0; j < fastLog.getContentsCount(); j++) {
                             FastLogContent fastLogContent = fastLog.getContents(j);
-                            if (logKey.equals(fastLogContent.getKey())) {
+                            if (valueKey.equals(fastLogContent.getKey(charset))) {
                                 try {
                                     RecordMetadata recordMetadata = kafkaProducer.send(
                                             new ProducerRecord<>(topic, null, fastLogContent.getValueBytes())).get();
                                     log.debug("{} {} {} {}({}) -> {}({}, {})",
-                                            project, logStore, topic, logKey, shardId,
+                                            project, logStore, topic, valueKey, shardId,
                                             recordMetadata.topic(), recordMetadata.partition(), recordMetadata.offset());
                                 } catch (Exception e) {
+                                    log.error("{} {} -> ERROR", topic, fastLogContent.getValue(charset));
                                     log.error(e.getMessage(), e);
                                 }
                             }
